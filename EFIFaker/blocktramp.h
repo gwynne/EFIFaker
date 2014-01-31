@@ -1,0 +1,3 @@
+
+extern void *pl_blockimp_table_page;
+extern struct pl_trampoline_table_config pl_blockimp_table_page_config;
