@@ -82,7 +82,7 @@ static EFI_TIME efi_time_from_timespec(struct timespec ts)
 	return efiTime;
 }
 
-#define EfiLog(format, ...) printf(format, ## __VA_ARGS__)
+#define EfiLog(format, ...) fprintf(stderr, format, ## __VA_ARGS__)
 
 static jmp_buf jb;
 static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
@@ -470,6 +470,35 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 			return EFI_UNSUPPORTED;
 		}),
 	};
+	APPLE_SET_OS_PROTOCOL appleSetOSProtocol = {
+		.Version = 2,
+		.SetOSVersion = shim(^ VOID (const CHAR8 *OSVersion) {
+			EfiLog("--> AppleSetOS.SetOSVersion(%s)\n", OSVersion);
+		}),
+		.SetOSVendor = shim(^ VOID (const CHAR8 *OSVendor) {
+			EfiLog("--> AppleSetOS.SetOSVendor(%s)\n", OSVendor);
+		}),
+	};
+	APPLE_FIRMWARE_PASSWORD_PROTOCOL appleFirmwarePasswordProtocol = {
+		.Signature = 0,
+		.Unknown = { 0, 0, 0 },
+		.Check = shim(^ EFI_STATUS (APPLE_FIRMWARE_PASSWORD_PROTOCOL *This, UINTN *CheckValue) {
+			EfiLog("--> AppleFirmwarePassword.Check(%p)\n", CheckValue);
+			if (CheckValue) {
+				*CheckValue = 0;
+			}
+			return EFI_SUCCESS;
+		}),
+	};
+	APPLE_KEY_STATE_PROTOCOL appleKeyStateProtocol = {
+		.Signature = 0,
+		.ReadKeyState = shim(^ EFI_STATUS (APPLE_KEY_STATE_PROTOCOL *This, UINT16 *ModifyFlags, UINTN *PressedKeyStatesCount, CHAR16 *PressedKeyStates) {
+			EfiLog("--> AppleKeyState.ReadKeyState()\n");
+			*ModifyFlags = 0x04;
+			*PressedKeyStatesCount = 0;
+			return EFI_SUCCESS;
+		}),
+	};
 	typedef struct {
 		EFI_STATUS (*EFIAPI UnknownA)(VOID);
 		EFI_STATUS (*EFIAPI UnknownB)(VOID);
@@ -584,18 +613,19 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 				*Memory = mmap(NULL, Pages * getpagesize(), PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_PRIVATE, -1, 0);
 			} else if (Type == AllocateMaxAddress) {
 				EfiLog("--> AllocatePages(AllocateMaxAddress, %d, %llu, %p)\n", MemoryType, Pages, (VOID *)*Memory);
-				*Memory = mmap(*Memory - (Pages * getpagesize()), PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_PRIVATE, MAP_ANON | MAP_PRIVATE, -1, 0);
+				*Memory = mmap(*Memory - ((Pages + 5) * getpagesize()), PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_PRIVATE, MAP_ANON | MAP_PRIVATE, -1, 0);
 			} else if (Type == AllocateAddress) {
 				EfiLog("--> AllocatePages(AllocateAddress, %d, %llu, %p)\n", MemoryType, Pages, (VOID *)*Memory);
 				*Memory = mmap(*Memory, Pages * getpagesize(), PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_FIXED | MAP_PRIVATE, -1, 0);
 			}
 			if ((VOID *)*Memory == MAP_FAILED)
 				return EFI_OUT_OF_RESOURCES;
+			EfiLog("<-- %p\n", (void *)*Memory);
 			return EFI_SUCCESS;
 		}),
 		.FreePages = shim(^ EFI_STATUS (EFI_PHYSICAL_ADDRESS Memory, UINTN Pages) {
 			if (munmap((VOID *)Memory, Pages * getpagesize()) < 0)
-				return EFI_NOT_FOUND;
+				return EFI_SUCCESS;//return EFI_NOT_FOUND;
 			return EFI_SUCCESS;
 		}),
 		FakeFunc(GetMemoryMap),
@@ -691,15 +721,33 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 				}
 				return EFI_SUCCESS;
 			} else if (memcmp(Protocol, &g, sizeof(EFI_GUID)) == 0) {
-				EfiLog("--> LocatProtocol(UNKNOWN, %p)\n", Registration);
+				EfiLog("--> LocateProtocol(UNKNOWN, %p)\n", Registration);
 				if (Interface) {
 					*Interface = (VOID *)&fakeProtocol;
 				}
 				return EFI_SUCCESS;
 			} else if (memcmp(Protocol, &EFI_CPU_ARCH_PROTOCOL_GUID, sizeof(EFI_GUID)) == 0) {
-				EfiLog("--> LocatProtocol(EFI_CPU_ARCH_PROTOCOL, %p)\n", Registration);
+				EfiLog("--> LocateProtocol(EFI_CPU_ARCH_PROTOCOL, %p)\n", Registration);
 				if (Interface) {
 					*Interface = (VOID *)&cpuArchProtocol;
+				}
+				return EFI_SUCCESS;
+			} else if (memcmp(Protocol, &APPLE_SET_OS_PROTOCOL_GUID, sizeof(EFI_GUID)) == 0) {
+				EfiLog("--> LocateProtocol(APPLE_SET_OS_PROTOCOL, %p)\n", Registration);
+				if (Interface) {
+					*Interface = (VOID *)&appleSetOSProtocol;
+				}
+				return EFI_SUCCESS;
+			} else if (memcmp(Protocol, &APPLE_FIRMWARE_PASSWORD_PROTOCOL_GUID, sizeof(EFI_GUID)) == 0) {
+				EfiLog("--> LocateProtocol(APPLE_FIRMWARE_PASSWORD_PROTOCOL, %p)\n", Registration);
+				if (Interface) {
+					*Interface = (VOID *)&appleFirmwarePasswordProtocol;
+				}
+				return EFI_SUCCESS;
+			} else if (memcmp(Protocol, &APPLE_KEY_STATE_PROTOCOL_GUID, sizeof(EFI_GUID)) == 0) {
+				EfiLog("--> LocateProtocol(APPLE_KEY_STATE_PROTOCOL, %p)\n", Registration);
+				if (Interface) {
+					*Interface = (VOID *)&appleKeyStateProtocol;
 				}
 				return EFI_SUCCESS;
 			}
@@ -710,11 +758,11 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 		FakeFunc(UninstallMultipleProtocolInterfaces),
 		FakeFunc(CalculateCrc32),
 		.CopyMem = shim(^ VOID (VOID *Destination, VOID *Source, UINTN Length) {
-//			EfiLog("--> CopyMem(%p, %p, %llu)\n", Destination, Source, Length);
+			EfiLog("--> CopyMem(%p, %p, %llu)\n", Destination, Source, Length);
 			memmove(Destination, Source, Length);
 		}),
 		.SetMem = shim(^ VOID (VOID *Buffer, UINTN Size, UINT8 Value) {
-//			EfiLog("--> SetMem(%p, %llu, %hhu)\n", Buffer, Size, Value);
+			EfiLog("--> SetMem(%p, %llu, %hhu)\n", Buffer, Size, Value);
 			memset(Buffer, Value, Size);
 		}),
 		FakeFunc(CreateEventEx),
@@ -801,36 +849,68 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 		NSLog(@"Can't allocate highmem region for bootloader, bailing");
 		return EFI_ABORTED;
 	}
+	static const uint8_t bytes[] = {
+		0x22, 0xe0, 0x66, 0xb8, 0x08, 0x00, 0x8e, 0xd8, 0x8e, 0xc0, 0x8e, 0xe0, 0x8e, 0xe8, 0x8e, 0xd0,
+		0xe9, 0xa1, 0x00, 0x00, 0x00, 0x66, 0xbc, 0x78, 0x56, 0x34, 0x12, 0xbf, 0x41, 0x50, 0x2e, 0x66,
+		0x0f, 0x01, 0x16, 0x21, 0x00, 0x66, 0xb8, 0x23, 0x00, 0x00, 0x40, 0x0f, 0x22, 0xc0, 0x66, 0xea,
+		0x02, 0xff, 0xff, 0xff, 0x10, 0x00, 0x2f, 0x00, 0x50, 0xff, 0xff, 0xff, 0x90, 0x90, 0x90, 0x90,
+		0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+		0xff, 0xff, 0x00, 0x00, 0x00, 0x93, 0xcf, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x9b, 0xcf, 0x00,
+		0xff, 0xff, 0x00, 0x00, 0x00, 0x9b, 0xaf, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x9b, 0x8f, 0x00,
+		0xff, 0xff, 0x00, 0x00, 0x00, 0x93, 0x8f, 0x00, 0x89, 0xc7, 0xb0, 0x02, 0xe6, 0x92, 0x89, 0xf8,
+		0xbf, 0x42, 0x50, 0xeb, 0x2c, 0x66, 0x89, 0xc4, 0xe9, 0x28, 0x00, 0x89, 0xe3, 0xb8, 0x01, 0x00,
+		0x00, 0x00, 0xf3, 0x90, 0x3b, 0x03, 0x74, 0xfa, 0x87, 0x03, 0x85, 0xc0, 0x75, 0xf4, 0x8b, 0x63,
+		0x08, 0x53, 0xff, 0x53, 0x04, 0x31, 0xc0, 0x89, 0x03, 0xf0, 0xff, 0x43, 0x0c, 0xfa, 0xf4, 0xeb,
+		0xfc, 0xeb, 0xd2, 0xe9, 0x2b, 0xff, 0x66, 0x81, 0xff, 0x41, 0x50, 0x74, 0xce, 0xe9, 0xf6, 0xfd,
+		0xff, 0xff, 0xe9, 0x48, 0xfe, 0xff, 0xff, 0x89, 0xe0, 0xff, 0xe6, 0x90, 0x90, 0x90, 0x90, 0x90,
+		0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x1d, 0xff, 0xff, 0xff, 0x27, 0x00, 0x90, 0x90,
+		0x00, 0x00, 0x00, 0x00, 0x56, 0x54, 0x46, 0x00, 0x0f, 0x09, 0xe9, 0x8b, 0xff, 0x90, 0x90, 0x90,
+	};
+#undef memcpy
+	memcpy(0xffffff08, bytes, MIN(sizeof(bytes), 0xffu-0x08u));
 	
 	//0x000000000001333c B998010000                      movl       $0x198, %ecx
 	//0x0000000000013341 0F32                            rdmsrl     
 	uint8_t *r = mmap(0, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_FIXED | MAP_PRIVATE, -1, 0);
 	
 	if (r == MAP_FAILED) {
-		NSLog(@" Can't allocate jump island, bailing");
+		NSLog(@" Can't allocate jump islands, bailing");
 		return EFI_ABORTED;
 	}
 
-//	uint8_t *p = 0x1000, *end = 0x33000;
-//	uint64_t *nextTrampoline = (uint64_t *)(r + 16);
-//	
-//	while (p && p < end) {
-//		p = memmem(p, end - p, (uint8_t[2]){ 0x0f, 0x32 }, 2);
-//		if (p) {
-//			EfiLog("+++ Patching rdmsr instruction at %p using trampoline at %p...\n", p, nextTrampoline);
-//			uint32_t selector = *(uint32_t *)(p - 4);
-//			void *block = shim(^ msr_result { return deal_with_msr(selector); });
-//			
-//			NSCAssert(nextTrampoline < (uint64_t *)4096, @"trampolines must fit in that one damned page");
-//			*nextTrampoline = (uint64_t)(uintptr_t)block;
-//			*(p - 5) = 0xff;
-//			*(p - 4) = 0x14;
-//			*(p - 3) = 0x25;
-//			*(uint32_t *)(p - 2) = (uint32_t)((uintptr_t)nextTrampoline & 0x00000000ffffffff);
-//			++nextTrampoline;
-//			p += 2;
-//		}
-//	}
+	union msr_patch {
+		struct {
+			uint8_t mov_op;
+			uint32_t msr_selector;
+			uint16_t msr_op;
+		} __attribute__((packed)) orig_instrs;
+		struct {
+			uint8_t call_ops[3];
+			uint32_t call_addr;
+		} __attribute__((packed)) tramp_instrs;
+	} __attribute__((packed)) msr_u;
+	
+	uint8_t *begin = 0x1000, *end = 0x33000, *p = begin;
+	uint64_t *nextTrampoline = (uint64_t *)(r + 16);
+	
+	while (p && p < end) {
+		p = memmem(p, end - p, (uint8_t[2]){ 0x0f, 0x32 }, 2);
+		if (p) {
+			EfiLog("+++ Patching rdmsr instruction at %p using trampoline at %p...\n", p, nextTrampoline);
+			union msr_patch *patch = (union msr_patch *)(p - 5);
+			uint32_t selector = patch->orig_instrs.msr_selector;
+			void *block = shim(^ msr_result { return deal_with_msr(selector); });
+			
+			NSCAssert(nextTrampoline < (uint64_t *)4096, @"trampolines must fit in that one damned page");
+			*nextTrampoline = (uint64_t)(uintptr_t)block;
+			patch->tramp_instrs.call_ops[0] = 0xff;
+			patch->tramp_instrs.call_ops[1] = 0x14;
+			patch->tramp_instrs.call_ops[2] = 0x25;
+			patch->tramp_instrs.call_addr = (uint32_t)((uintptr_t)nextTrampoline & 0x00000000ffffffff);
+			++nextTrampoline;
+			p += 2;
+		}
+	}
 
 //#undef memcpy
 //	memcpy(0x12e30, &__hack_jumper, 7);
@@ -839,14 +919,32 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 //	memcpy(r + 16, &__hack_debug_region, 48);
 //	*(uint8_t *)(0x1301e) = 0x01;
 	
-	uint64_t *pp = (uint64_t *)0x13017;
-	id block = ^ (const char *s) {
-		printf(">>> %s\n", s);
-	};
+//	uint64_t *pp = (uint64_t *)0x13017;
+//	id block = ^ (const char *s) {
+//		printf(">>> %s\n", s);
+//	};
+//	
+//	*pp = 0x90000000002514ff; // callq *0x0; nop
+//	*(uint64_t *)(r +  0) = &__hack_debug_logs;
+//	*(uint64_t *)(r +  8) = shim(block);
 	
-	*pp = 0x90000000002514ff; // callq *0x0; nop
-	*(uint64_t *)(r +  0) = &__hack_debug_logs;
-	*(uint64_t *)(r +  8) = shim(block);
+//	*((uint8_t *)0x1310f) = 0x75;
+	
+	p = 0x130f8;
+	*p++ = 0xff;
+	*p++ = 0x14;
+	*p++ = 0x25;
+	*(uint32_t *)p = nextTrampoline;
+	*nextTrampoline = (uint64_t)(uintptr_t)(uint8_t *)shim(^ void (const CHAR8 *s) {
+		printf("*** %s\n", s);
+	});
+	p += 4;
+	*p++ = 0x48;
+	*p++ = 0x83;
+	*p++ = 0xc4;
+	*p++ = 0x40;
+	*p++ = 0x5d;
+	*p++ = 0xc3;
 	
 	if ((result = setjmp(jb)) == 0) {
 		__asm__ (
@@ -884,7 +982,7 @@ static void __attribute__((naked,used,noinline)) __hack_debug_logs(void)
 
 static msr_result deal_with_msr(uint32_t which)
 {
-	EfiLog("+++ Need MSR value for selector %x\n", which);
+	EfiLog("+++ Need MSR value for selector 0x%x\n", which);
 	return (msr_result){ 0, 0 };
 }
 
