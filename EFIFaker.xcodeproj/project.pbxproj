@@ -44,7 +44,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		FA4297F3188B5FED00AC361A /* efi_tables.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = efi_tables.h; path = "../../../../../../efi-internals/efi_tables.h"; sourceTree = "<group>"; };
 		FA4297F5188B74FF00AC361A /* blockimp.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = blockimp.c; sourceTree = "<group>"; };
 		FA4297F6188B74FF00AC361A /* blockimp.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = blockimp.h; sourceTree = "<group>"; };
 		FA4297F7188B74FF00AC361A /* trampoline_table.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = trampoline_table.c; sourceTree = "<group>"; };
@@ -61,6 +60,17 @@
 		FAB4F26E1884EC4300D54DA1 /* EFIFaker-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "EFIFaker-Prefix.pch"; sourceTree = "<group>"; };
 		FAB4F2761884F07900D54DA1 /* PELoader.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = PELoader.h; sourceTree = "<group>"; };
 		FAB4F2771884F07A00D54DA1 /* PELoader.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = PELoader.m; sourceTree = "<group>"; };
+		FAB5119818CD03FD0028F0EC /* efi_apple.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = efi_apple.h; sourceTree = "<group>"; };
+		FAB5119918CD03FD0028F0EC /* efi_cpu_arch.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = efi_cpu_arch.h; sourceTree = "<group>"; };
+		FAB5119A18CD03FD0028F0EC /* efi_data_hub.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = efi_data_hub.h; sourceTree = "<group>"; };
+		FAB5119B18CD03FD0028F0EC /* efi_filesystem.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = efi_filesystem.h; sourceTree = "<group>"; };
+		FAB5119C18CD03FD0028F0EC /* efi_graphics.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = efi_graphics.h; sourceTree = "<group>"; };
+		FAB5119D18CD03FD0028F0EC /* efi_images.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = efi_images.h; sourceTree = "<group>"; };
+		FAB5119E18CD03FD0028F0EC /* efi_misc.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = efi_misc.h; sourceTree = "<group>"; };
+		FAB5119F18CD03FD0028F0EC /* efi_services.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = efi_services.h; sourceTree = "<group>"; };
+		FAB511A018CD03FD0028F0EC /* efi_simple_text.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = efi_simple_text.h; sourceTree = "<group>"; };
+		FAB511A118CD03FD0028F0EC /* efi_types.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = efi_types.h; sourceTree = "<group>"; };
+		FAB511A818CD17B80028F0EC /* efi_tables.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = efi_tables.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -95,6 +105,7 @@
 		FAB4F25C1884EC4300D54DA1 = {
 			isa = PBXGroup;
 			children = (
+				FAB5119718CD03FD0028F0EC /* efi_headers */,
 				FAB4F26A1884EC4300D54DA1 /* EFIFaker */,
 				FAB4F2671884EC4300D54DA1 /* Frameworks */,
 				FAB4F2661884EC4300D54DA1 /* Products */,
@@ -121,7 +132,6 @@
 			isa = PBXGroup;
 			children = (
 				FA429801188B75FA00AC361A /* trampolines */,
-				FA4297F3188B5FED00AC361A /* efi_tables.h */,
 				FAB4F26B1884EC4300D54DA1 /* main.m */,
 				FAB4F26D1884EC4300D54DA1 /* Supporting Files */,
 				FAB4F2761884F07900D54DA1 /* PELoader.h */,
@@ -136,6 +146,25 @@
 				FAB4F26E1884EC4300D54DA1 /* EFIFaker-Prefix.pch */,
 			);
 			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+		FAB5119718CD03FD0028F0EC /* efi_headers */ = {
+			isa = PBXGroup;
+			children = (
+				FAB511A818CD17B80028F0EC /* efi_tables.h */,
+				FAB5119818CD03FD0028F0EC /* efi_apple.h */,
+				FAB5119918CD03FD0028F0EC /* efi_cpu_arch.h */,
+				FAB5119A18CD03FD0028F0EC /* efi_data_hub.h */,
+				FAB5119B18CD03FD0028F0EC /* efi_filesystem.h */,
+				FAB5119C18CD03FD0028F0EC /* efi_graphics.h */,
+				FAB5119D18CD03FD0028F0EC /* efi_images.h */,
+				FAB5119E18CD03FD0028F0EC /* efi_misc.h */,
+				FAB5119F18CD03FD0028F0EC /* efi_services.h */,
+				FAB511A018CD03FD0028F0EC /* efi_simple_text.h */,
+				FAB511A118CD03FD0028F0EC /* efi_types.h */,
+			);
+			name = efi_headers;
+			path = "../../../../../efi-internals/efi_headers";
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
