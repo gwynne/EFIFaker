@@ -46,7 +46,7 @@ static const char *guid_str(EFI_GUID *guid)
 	snprintf(buf, 128, "{ 0x%08x, 0x%04hx, 0x%04hx, { 0x%02hhx, 0x%02hhx, 0x%02hhx, 0x%02hhx, 0x%02hhx, 0x%02hhx, 0x%02hhx, 0x%02hhx } }",
 			 guid->guid1, guid->guid2, guid->guid3, guid->guid4[0], guid->guid4[1], guid->guid4[2], guid->guid4[3],
 			 guid->guid4[4], guid->guid4[5], guid->guid4[6], guid->guid4[7]);
-	return buf;
+	return strdup(buf);
 }
 
 static NSUInteger wstrlen(CHAR16 *s)
@@ -84,11 +84,63 @@ static EFI_TIME efi_time_from_timespec(struct timespec ts)
 
 #define EfiLog(format, ...) fprintf(stderr, format, ## __VA_ARGS__)
 
+typedef struct {
+	EFI_DATA_HUB_PROTOCOL Hub;
+	NSMutableArray * __unsafe_unretained dataRecords;
+	NSUInteger iteration;
+} EFI_DATA_HUB_PROTOCOL_INTERNAL;
+static EFI_STATUS noshim_LogData(EFI_DATA_HUB_PROTOCOL_INTERNAL *This, EFI_GUID *DataRecordGuid, EFI_GUID *ProducerName, UINT64 DataRecordClass,
+								 VOID *RawData, UINT32 RawDataSize)
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	struct timespec ts = { .tv_sec = tv.tv_sec, .tv_nsec = tv.tv_usec * NSEC_PER_USEC };
+	EFI_DATA_RECORD_HEADER header = {
+		.Version = EFI_DATA_RECORD_HEADER_VERSION,
+		.HeaderSize = sizeof(EFI_DATA_RECORD_HEADER),
+		.RecordSize = RawDataSize + sizeof(EFI_DATA_RECORD_HEADER),
+		.DataRecordGuid = *DataRecordGuid,
+		.ProducerName = *ProducerName,
+		.DataRecordClass = DataRecordClass,
+		.LogTime = efi_time_from_timespec(ts),
+		.LogMonotonicCount = [NSDate timeIntervalSinceReferenceDate] * (double)NSEC_PER_SEC,
+	};
+	
+	EfiLog("--> EfiDataHub.LogData(%s, %s, %llu, %u)\n", guid_str(DataRecordGuid), guid_str(ProducerName), DataRecordClass, RawDataSize);
+	NSMutableData *data = [NSMutableData dataWithBytes:&header length:sizeof(header)];
+	
+	[data appendBytes:RawData length:RawDataSize];
+	[This->dataRecords addObject:data];
+	return EFI_SUCCESS;
+}
+
+void setprop(EFI_DATA_HUB_PROTOCOL *hubProtocol, CHAR16 *name, EFI_GUID guid, VOID *data, UINT32 dataLen)
+{
+	static EFI_GUID specialGuid = { 0x64517cc8, 0x6561, 0x4051, { 0xb0, 0x3c, 0x59, 0x64, 0xb6, 0x0f, 0x4c, 0x7a } };
+	size_t nameLen = (wstrlen(name) + 1) * sizeof(CHAR16);
+	size_t dlen = sizeof(EFI_PROPERTY_SUBCLASS_DATA) + nameLen + dataLen;
+	NSMutableData *ndata = [NSMutableData dataWithLength:sizeof(EFI_PROPERTY_SUBCLASS_DATA)];
+	EFI_PROPERTY_SUBCLASS_DATA *dataRec = ndata.mutableBytes;
+	
+	dataRec->Header.Version = EFI_DATA_RECORD_HEADER_VERSION;
+	dataRec->Header.HeaderSize = sizeof(EFI_SUBCLASS_TYPE1_HEADER);
+	dataRec->Header.Instance = 0xffff;
+	dataRec->Header.SubInstance = 0xffff;
+	dataRec->Header.RecordType = 0xffffffff;
+	dataRec->Record.DataNameSize = nameLen;
+	dataRec->Record.DataSize = dataLen;
+	[ndata appendBytes:name length:nameLen];
+	[ndata appendBytes:data length:dataLen];
+	noshim_LogData((EFI_DATA_HUB_PROTOCOL_INTERNAL *)hubProtocol, &guid, &specialGuid, EFI_DATA_CLASS_DATA, dataRec, dlen);
+}
+
 static jmp_buf jb;
 static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 {
 	NSMutableDictionary *efiVars = @{
 		@"{ 0x7c436110, 0xab2a, 0x4bbb, { 0xa8, 0x80, 0xfe, 0x41, 0x99, 0x5c, 0x9f, 0x82 } }.boot-args": [@"-v" dataUsingEncoding:NSUTF16LittleEndianStringEncoding],
+//		@"{ 0x4d1ede05, 0x38c7, 0x4a6a, { 0x9c, 0xc6, 0x4b, 0xcc, 0xa8, 0xb3, 0x8c, 0x14 } }.ROM": [NSData dataWithBytes:(char[]){ 0x56, 0x4d, 0x7f, 0xa2, 0xf8, 0x2c } length:6],
+//		@"{ 0x4d1ede05, 0x38c7, 0x4a6a, { 0x9c, 0xc6, 0x4b, 0xcc, 0xa8, 0xb3, 0x8c, 0x14 } }.MLB": [NSData dataWithBytes:(char[]){ 0x61, 0x66, 0x4f, 0x49, 0x6e, 0x61, 0x68, 0x4a, 0x69, 0x75, 0x4d, 0x38, 0x49, 0x41, 0x2e, 0x2e, 0x2e } length:17],
 //		@"{ 0x7c436110, 0xab2a, 0x4bbb, { 0xa8, 0x80, 0xfe, 0x41, 0x99, 0x5c, 0x9f, 0x82 } }.efiboot-perf-record": [NSData dataWithBytes:(int[1]){1} length:1],
 	}.mutableCopy;
 	EFI_SIMPLE_TEXT_OUTPUT_PROTOCOL outputProtocol = {
@@ -395,31 +447,11 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 			return EFI_SUCCESS;
 		}),
 	};
-	typedef struct {
-		EFI_DATA_HUB_PROTOCOL Hub;
-		NSMutableArray * __unsafe_unretained dataRecords;
-		NSUInteger iteration;
-	} EFI_DATA_HUB_PROTOCOL_INTERNAL;
 	EFI_DATA_HUB_PROTOCOL_INTERNAL dataHubProtocol = {
 		.Hub = {
 		.LogData = shim(^ EFI_STATUS (EFI_DATA_HUB_PROTOCOL_INTERNAL *This, EFI_GUID *DataRecordGuid, EFI_GUID *ProducerName, UINT64 DataRecordClass,
 									  VOID *RawData, UINT32 RawDataSize) {
-			EFI_DATA_RECORD_HEADER header = {
-				.Version = EFI_DATA_RECORD_HEADER_VERSION,
-				.HeaderSize = sizeof(EFI_DATA_RECORD_HEADER),
-				.DataRecordGuid = *DataRecordGuid,
-				.ProducerName = *ProducerName,
-				.DataRecordClass = DataRecordClass,
-				.LogTime = {},
-				.LogMonotonicCount = [NSDate timeIntervalSinceReferenceDate],
-			};
-			
-			EfiLog("--> EfiDataHub.LogData(%s, %s, %llu, %u)\n", guid_str(DataRecordGuid), guid_str(ProducerName), DataRecordClass, RawDataSize);
-			NSMutableData *data = [NSMutableData dataWithBytes:&header length:sizeof(header)];
-			
-			[data appendBytes:RawData length:RawDataSize];
-			[This->dataRecords addObject:data];
-			return EFI_SUCCESS;
+			return noshim_LogData(This, DataRecordGuid, ProducerName, DataRecordClass, RawData, RawDataSize);
 		}),
 		.GetNextDataRecord = shim(^ EFI_STATUS(EFI_DATA_HUB_PROTOCOL_INTERNAL *This, UINT64 *MonotonicCount, EFI_EVENT *FilterDriver,
 											   EFI_DATA_RECORD_HEADER **Record) {
@@ -438,7 +470,7 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 				*Record = (EFI_DATA_RECORD_HEADER *)rec.bytes;
 			}
 			
-			if (This->dataRecords.count >= ++This->iteration) {
+			if (++This->iteration >= This->dataRecords.count) {
 				*MonotonicCount = 0;
 			} else {
 				*MonotonicCount = ((EFI_DATA_RECORD_HEADER *)((NSData *)This->dataRecords[This->iteration]).bytes)->LogMonotonicCount;
@@ -946,6 +978,14 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 	*p++ = 0x5d;
 	*p++ = 0xc3;
 	
+	EFI_GUID FsbFrequencyPropertyGuid = { 0xd1a0dD55, 0x75b9, 0x41a3, { 0x90, 0x36, 0x8f, 0x4a, 0x26, 0x1c, 0xbb, 0xa2 } };
+	EFI_GUID DevicePathsSupportedGuid = { 0x5bb91cf7, 0xd816, 0x404b, { 0x86, 0x72, 0x68, 0xf2, 0x7f, 0x78, 0x31, 0xdc } };
+	EFI_GUID specialGuid = { 0x64517cc8, 0x6561, 0x4051, { 0xb0, 0x3c, 0x59, 0x64, 0xb6, 0x0f, 0x4c, 0x7a } };
+
+	setprop(&dataHubProtocol.Hub, (CHAR16 *)"F\0S\0B\0F\0r\0e\0q\0u\0e\0n\0c\0y\0\0\0", specialGuid, (UINT64[]){ 200000000 }, sizeof(UINT64));
+	setprop(&dataHubProtocol.Hub, (CHAR16 *)"D\0e\0v\0i\0c\0e\0P\0a\0t\0h\0s\0S\0u\0p\0p\0o\0r\0t\0e\0d\0\0\0", specialGuid, (UINT32[]){ 1 }, sizeof(UINT32));
+	setprop(&dataHubProtocol.Hub, (CHAR16 *)"M\0o\0d\0e\0l\0\0\0", specialGuid, (VOID *)"M\0a\0c\0B\0o\0o\0k\0A\0i\0r\06\0,\02\0\0\0", 30);
+		
 	if ((result = setjmp(jb)) == 0) {
 		__asm__ (
 			"call *%3" :
