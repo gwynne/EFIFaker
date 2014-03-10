@@ -234,7 +234,7 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 		}),
 		.SetMode = shim(^ EFI_STATUS (EFI_CONSOLE_CONTROL_PROTOCOL *This, EFI_CONSOLE_CONTROL_SCREEN_MODE Mode) {
 			EfiLog("--> EfiConsoleControl.SetMode(%d)\n", Mode);
-			return Mode == EfiConsoleControlScreenText ? EFI_SUCCESS : EFI_UNSUPPORTED;
+			return (Mode == EfiConsoleControlScreenText || Mode == EfiConsoleControlScreenGraphics) ? EFI_SUCCESS : EFI_UNSUPPORTED;
 		}),
 		.LockStdIn = shim(^ EFI_STATUS (EFI_CONSOLE_CONTROL_PROTOCOL *This, CHAR16 *Password) {
 			EfiLog("--> EfiConsoleControl.LockStdIn(%s)\n", utf8_str(Password));
@@ -531,6 +531,47 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 			return EFI_SUCCESS;
 		}),
 	};
+	EFI_GRAPHICS_OUTPUT_PROTOCOL graphicsOutputProtocol = {
+		.QueryMode = shim(^ EFI_STATUS (EFI_GRAPHICS_OUTPUT_PROTOCOL *This, UINT32 ModeNumber, UINTN *SizeOfInfo, EFI_GRAPHICS_OUTPUT_MODE_INFORMATION **Info) {
+			EfiLog("--> EfiGraphicsOutput.QueryMode(%u)\n", ModeNumber);
+			if (ModeNumber > 0) {
+				return EFI_INVALID_PARAMETER;
+			}
+			*SizeOfInfo = sizeof(EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE);
+			*Info = This->Mode->Info;
+			return EFI_SUCCESS;
+		}),
+		.SetMode = shim(^ EFI_STATUS (EFI_GRAPHICS_OUTPUT_PROTOCOL *This, UINT32 ModeNumber) {
+			EfiLog("--> EfiGraphicsOutput.SetMode(%u)\n", ModeNumber);
+			if (ModeNumber > 0) {
+				return EFI_INVALID_PARAMETER;
+			}
+			return EFI_SUCCESS;
+		}),
+		.Blt = shim(^ EFI_STATUS (EFI_GRAPHICS_OUTPUT_PROTOCOL *This, EFI_GRAPHICS_OUTPUT_BLT_PIXEL *BltBuffer, EFI_GRAPHICS_OUTPUT_BLT_OPERATION BltOperation,
+								  UINTN SourceX, UINTN SourceY, UINTN DestinationX, UINTN DestinationY, UINTN Width, UINTN Height, UINTN Delta) {
+			EfiLog("--> EfiGraphicsOutput.Blt(Operation = %s, X1 = %llu, Y1 = %llu, X2 = %llu, Y2 = %llu, W = %llu, H = %llu, D = %llu\n",
+				(char *[]){ "EfiBltVideoFille", "EfiBltVideoToBltBuffer", "EfiBltBufferToVideo", "EfiBltVideoToVideo" }[BltOperation],
+				SourceX, SourceY, DestinationX, DestinationY, Width, Height, Delta
+			);
+			return EFI_SUCCESS;
+		}),
+		.Mode = (EFI_GRAPHICS_OUTPUT_PROTOCOL_MODE [1]){{
+			.MaxMode = 1,
+			.Mode = 0,
+			.Info = (EFI_GRAPHICS_OUTPUT_MODE_INFORMATION [1]){{
+				.Version = 0,
+				.HorizontalResolution = 1024,
+				.VerticalResolution = 768,
+				.PixelFormat = PixelBltOnly,
+				.PixelInformation = 0,
+				.PixelsPerScanLine = 1024,
+			}},
+			.SizeOfInfo = sizeof(EFI_GRAPHICS_OUTPUT_MODE_INFORMATION),
+			.FrameBufferBase = 0,
+			.FrameBufferSize = 0,
+		}},
+	};
 	typedef struct {
 		EFI_STATUS (*EFIAPI UnknownA)(VOID);
 		EFI_STATUS (*EFIAPI UnknownB)(VOID);
@@ -701,6 +742,10 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 				EfiLog("--> HandleProtocol(%p, EFI_SIMPLE_FILE_SYSTEM_PROTOCOL)\n", Handle);
 				*Interface = (VOID *)&fileSystemProtocol;
 				return EFI_SUCCESS;
+			} else if (memcmp(Protocol, &EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID, sizeof(EFI_GUID)) == 0) {
+				EfiLog("--> HandleProtocol(%p, EFI_GRAPHICS_OUTPUT_PROTOCOL)\n", Handle);
+				*Interface = (VOID *)&graphicsOutputProtocol;
+				return EFI_SUCCESS;
 			}
 			EfiLog("--> HandleProtocol(%p, %s)\n", Handle, guid_str(Protocol));
 			return EFI_NOT_FOUND;
@@ -855,7 +900,7 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 	};
 	EFI_SYSTEM_TABLE st = {
 		.Hdr = { EFI_SYSTEM_TABLE_SIGNATURE, EFI_SYSTEM_TABLE_REVISION, sizeof(EFI_SYSTEM_TABLE), 0, 0 },
-		.FirmwareVendor = (CHAR16 *)"F\0a\0k\0e\0 \0E\0F\0I\0",
+		.FirmwareVendor = (CHAR16 *)"F\0a\0k\0e\0 \0E\0F\0I\0\0\0",
 		.FirmwareRevision = 0,
 		.ConsoleInHandle = (EFI_HANDLE)0xabad1deadeadbee4,
 		.ConIn = &inputProtocol,
@@ -978,8 +1023,8 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 	*p++ = 0x5d;
 	*p++ = 0xc3;
 	
-	EFI_GUID FsbFrequencyPropertyGuid = { 0xd1a0dD55, 0x75b9, 0x41a3, { 0x90, 0x36, 0x8f, 0x4a, 0x26, 0x1c, 0xbb, 0xa2 } };
-	EFI_GUID DevicePathsSupportedGuid = { 0x5bb91cf7, 0xd816, 0x404b, { 0x86, 0x72, 0x68, 0xf2, 0x7f, 0x78, 0x31, 0xdc } };
+//	EFI_GUID FsbFrequencyPropertyGuid = { 0xd1a0dD55, 0x75b9, 0x41a3, { 0x90, 0x36, 0x8f, 0x4a, 0x26, 0x1c, 0xbb, 0xa2 } };
+//	EFI_GUID DevicePathsSupportedGuid = { 0x5bb91cf7, 0xd816, 0x404b, { 0x86, 0x72, 0x68, 0xf2, 0x7f, 0x78, 0x31, 0xdc } };
 	EFI_GUID specialGuid = { 0x64517cc8, 0x6561, 0x4051, { 0xb0, 0x3c, 0x59, 0x64, 0xb6, 0x0f, 0x4c, 0x7a } };
 
 	setprop(&dataHubProtocol.Hub, (CHAR16 *)"F\0S\0B\0F\0r\0e\0q\0u\0e\0n\0c\0y\0\0\0", specialGuid, (UINT64[]){ 200000000 }, sizeof(UINT64));
