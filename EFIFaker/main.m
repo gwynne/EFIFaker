@@ -1052,19 +1052,23 @@ int main(int argc, const char **argv)
 {
 	@autoreleasepool
 	{
-		NSError *error = nil;
-		PELoader *loader = [[PELoader alloc] initWithURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:argv[1]]] error:&error];
-		
-		if (!loader)
-			NSLog(@"Failed to load: %@", error);
+		if (argc == 2) {
+			NSError *error = nil;
+			PELoader *loader = [[PELoader alloc] initWithURL:[NSURL fileURLWithPath:[NSString stringWithUTF8String:argv[1]]] error:&error];
 			
-		if (![loader mapAndReturnError:&error])
-			NSLog(@"Failed to map: %@", error);
-		
-		setvbuf(stdin, NULL, _IONBF, 0);
-		setvbuf(stdout, NULL, _IONBF, 0);
-		setvbuf(stderr, NULL, _IONBF, 0);
-		NSLog(@"%llu", callEntryPoint(loader));
+			if (!loader) {
+				NSLog(@"Failed to load: %@", error);
+			}
+			
+			if (![loader mapAndReturnError:&error]) {
+				NSLog(@"Failed to map: %@", error);
+			}
+			
+			setvbuf(stdin, NULL, _IONBF, 0);
+			setvbuf(stdout, NULL, _IONBF, 0);
+			setvbuf(stderr, NULL, _IONBF, 0);
+			NSLog(@"%llu", callEntryPoint(loader));
+		}
 	}
 	return 0;
 }

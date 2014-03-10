@@ -163,8 +163,7 @@
 				FAB511A018CD03FD0028F0EC /* efi_simple_text.h */,
 				FAB511A118CD03FD0028F0EC /* efi_types.h */,
 			);
-			name = efi_headers;
-			path = "../../../../../efi-internals/efi_headers";
+			path = efi_headers;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
