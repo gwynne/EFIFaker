@@ -553,8 +553,8 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 		}),
 		.Blt = shim(^ EFI_STATUS (EFI_GRAPHICS_OUTPUT_PROTOCOL *This, EFI_GRAPHICS_OUTPUT_BLT_PIXEL *BltBuffer, EFI_GRAPHICS_OUTPUT_BLT_OPERATION BltOperation,
 								  UINTN SourceX, UINTN SourceY, UINTN DestinationX, UINTN DestinationY, UINTN Width, UINTN Height, UINTN Delta) {
-			EfiLog("--> EfiGraphicsOutput.Blt(Operation = %s, X1 = %llu, Y1 = %llu, X2 = %llu, Y2 = %llu, W = %llu, H = %llu, D = %llu\n",
-				(char *[]){ "EfiBltVideoFille", "EfiBltVideoToBltBuffer", "EfiBltBufferToVideo", "EfiBltVideoToVideo" }[BltOperation],
+			EfiLog("--> EfiGraphicsOutput.Blt(Operation = %s, X1 = %llu, Y1 = %llu, X2 = %llu, Y2 = %llu, W = %llu, H = %llu, D = %llu)\n",
+				(char *[]){ "EfiBltVideoFill", "EfiBltVideoToBltBuffer", "EfiBltBufferToVideo", "EfiBltVideoToVideo" }[BltOperation],
 				SourceX, SourceY, DestinationX, DestinationY, Width, Height, Delta
 			);
 			return EFI_SUCCESS;
