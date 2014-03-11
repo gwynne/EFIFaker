@@ -566,13 +566,13 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 				.Version = 0,
 				.HorizontalResolution = 1024,
 				.VerticalResolution = 768,
-				.PixelFormat = PixelBltOnly,
+				.PixelFormat = PixelRedGreenBlueReserved8BitPerColor,
 				.PixelInformation = 0,
 				.PixelsPerScanLine = 1024,
 			}},
 			.SizeOfInfo = sizeof(EFI_GRAPHICS_OUTPUT_MODE_INFORMATION),
-			.FrameBufferBase = 0,
-			.FrameBufferSize = 0,
+			.FrameBufferBase = calloc(sizeof(UINT32), 1024 * 768),
+			.FrameBufferSize = 1024 * 768 * sizeof(UINT32),
 		}},
 	};
 	typedef struct {
