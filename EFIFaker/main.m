@@ -134,6 +134,9 @@ void setprop(EFI_DATA_HUB_PROTOCOL *hubProtocol, CHAR16 *name, EFI_GUID guid, VO
 	free(dataRec);
 }
 
+#undef memcpy
+#undef memmove
+#undef memset
 static jmp_buf jb;
 static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 {
