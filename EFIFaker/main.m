@@ -119,8 +119,7 @@ void setprop(EFI_DATA_HUB_PROTOCOL *hubProtocol, CHAR16 *name, EFI_GUID guid, VO
 	static EFI_GUID specialGuid = { 0x64517cc8, 0x6561, 0x4051, { 0xb0, 0x3c, 0x59, 0x64, 0xb6, 0x0f, 0x4c, 0x7a } };
 	size_t nameLen = (wstrlen(name) + 1) * sizeof(CHAR16);
 	size_t dlen = sizeof(EFI_PROPERTY_SUBCLASS_DATA) + nameLen + dataLen;
-	NSMutableData *ndata = [NSMutableData dataWithLength:sizeof(EFI_PROPERTY_SUBCLASS_DATA)];
-	EFI_PROPERTY_SUBCLASS_DATA *dataRec = ndata.mutableBytes;
+	EFI_PROPERTY_SUBCLASS_DATA *dataRec = calloc(1, sizeof(EFI_PROPERTY_SUBCLASS_DATA) + nameLen + dataLen);
 	
 	dataRec->Header.Version = EFI_DATA_RECORD_HEADER_VERSION;
 	dataRec->Header.HeaderSize = sizeof(EFI_SUBCLASS_TYPE1_HEADER);
@@ -129,9 +128,10 @@ void setprop(EFI_DATA_HUB_PROTOCOL *hubProtocol, CHAR16 *name, EFI_GUID guid, VO
 	dataRec->Header.RecordType = 0xffffffff;
 	dataRec->Record.DataNameSize = nameLen;
 	dataRec->Record.DataSize = dataLen;
-	[ndata appendBytes:name length:nameLen];
-	[ndata appendBytes:data length:dataLen];
+	memcpy(((char *)dataRec) + sizeof(EFI_PROPERTY_SUBCLASS_DATA), name, nameLen);
+	memcpy(((char *)dataRec) + sizeof(EFI_PROPERTY_SUBCLASS_DATA) + nameLen, data, dataLen);
 	noshim_LogData((EFI_DATA_HUB_PROTOCOL_INTERNAL *)hubProtocol, &guid, &specialGuid, EFI_DATA_CLASS_DATA, dataRec, dlen);
+	free(dataRec);
 }
 
 static jmp_buf jb;
