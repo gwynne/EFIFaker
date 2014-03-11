@@ -71,6 +71,14 @@ asm << 'EOF'
 		mov		%rdx, %rdx
 		mov		%r8, %rcx
 		mov		%r9, %r8
+		mov		0x38(%rbp), %r9
+		push	%r9
+		mov		0x30(%rbp), %r9
+		push	%r9
+		mov		0x28(%rbp), %r9
+		push	%r9
+		mov		0x20(%rbp), %r9
+		push	%r9
 		mov		0x18(%rbp), %r9
 		push	%r9
 		mov		0x10(%rbp), %r9
@@ -81,7 +89,7 @@ asm << 'EOF'
 		// Jump to the block fptr; can't tail call because we need to tidy the stack (eww)
 		call	*0x10(%rdi)
 
-		add		$0x8, %rsp
+		add		$0x28, %rsp
 		pop %r15
 		pop %r14
 		pop %r13
