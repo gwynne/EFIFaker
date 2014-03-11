@@ -706,11 +706,18 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 		}),
 		FakeFunc(GetMemoryMap),
 		.AllocatePool = shim(^ EFI_STATUS (EFI_MEMORY_TYPE PoolType, UINTN Size, VOID **Buffer) {
-			if (PoolType > EfiMaxMemoryType)
+			UINTN RealSize = (Size % 4096) == 0 ? Size : (Size + 4096 - (Size % 4096));
+//			EfiLog("--> AllocatePool(%d, %llu/%llu): ", PoolType, Size, RealSize);
+			if (PoolType > EfiMaxMemoryType) {
+//				EfiLog("Bad memory type\n");
 				return EFI_INVALID_PARAMETER;
-			*Buffer = malloc(Size);
-			if (!*Buffer)
+			}
+			*Buffer = malloc(RealSize);
+			if (!*Buffer) {
+//				EfiLog("Allocation failure\n");
 				return EFI_OUT_OF_RESOURCES;
+			}
+//			EfiLog("%p\n", *Buffer);
 			return EFI_SUCCESS;
 		}),
 		.FreePool = shim(^ EFI_STATUS (VOID *Buffer) {
