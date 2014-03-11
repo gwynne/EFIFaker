@@ -490,7 +490,7 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 			return EFI_UNSUPPORTED;
 		}),
 		},
-		.dataRecords = (__bridge NSMutableArray *)(__bridge_retained CFArrayRef)@[].mutableCopy,
+		.dataRecords = (__bridge NSMutableArray *)CFBridgingRetain(@[].mutableCopy),
 		.iteration = 0,
 	};
 	APPLE_DEVICE_CONTROL_PROTOCOL appleDeviceControlProtocol = {
