@@ -1038,6 +1038,8 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 	EFI_GUID specialGuid = { 0x64517cc8, 0x6561, 0x4051, { 0xb0, 0x3c, 0x59, 0x64, 0xb6, 0x0f, 0x4c, 0x7a } };
 
 	setprop(&dataHubProtocol.Hub, (CHAR16 *)"F\0S\0B\0F\0r\0e\0q\0u\0e\0n\0c\0y\0\0\0", specialGuid, (UINT64[]){ 200000000 }, sizeof(UINT64));
+	setprop(&dataHubProtocol.Hub, (CHAR16 *)"T\0S\0C\0F\0r\0e\0q\0u\0e\0n\0c\0y\0\0\0", specialGuid, (UINT64[]){ 200000000 }, sizeof(UINT64));
+	setprop(&dataHubProtocol.Hub, (CHAR16 *)"C\0P\0U\0F\0r\0e\0q\0u\0e\0n\0c\0y\0\0\0", specialGuid, (UINT64[]){ 200000000 }, sizeof(UINT64));
 	setprop(&dataHubProtocol.Hub, (CHAR16 *)"D\0e\0v\0i\0c\0e\0P\0a\0t\0h\0s\0S\0u\0p\0p\0o\0r\0t\0e\0d\0\0\0", specialGuid, (UINT32[]){ 1 }, sizeof(UINT32));
 	setprop(&dataHubProtocol.Hub, (CHAR16 *)"M\0o\0d\0e\0l\0\0\0", specialGuid, (VOID *)"M\0a\0c\0B\0o\0o\0k\0A\0i\0r\06\0,\02\0\0\0", 30);
 		
