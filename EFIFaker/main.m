@@ -912,6 +912,7 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 		.Hdr = { EFI_SYSTEM_TABLE_SIGNATURE, EFI_SYSTEM_TABLE_REVISION, sizeof(EFI_SYSTEM_TABLE), 0, 0 },
 		.FirmwareVendor = (CHAR16 *)"F\0a\0k\0e\0 \0E\0F\0I\0\0\0",
 		.FirmwareRevision = 0,
+		.__Padding = 0,
 		.ConsoleInHandle = (EFI_HANDLE)0xabad1deadeadbee4,
 		.ConIn = &inputProtocol,
 		.ConsoleOutHandle = (EFI_HANDLE)0xabad1deadeadbeef,
@@ -953,7 +954,6 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 		0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x90, 0x1d, 0xff, 0xff, 0xff, 0x27, 0x00, 0x90, 0x90,
 		0x00, 0x00, 0x00, 0x00, 0x56, 0x54, 0x46, 0x00, 0x0f, 0x09, 0xe9, 0x8b, 0xff, 0x90, 0x90, 0x90,
 	};
-#undef memcpy
 	memcpy(0xffffff08, bytes, MIN(sizeof(bytes), 0xffu-0x08u));
 	
 	//0x000000000001333c B998010000                      movl       $0x198, %ecx
@@ -999,24 +999,6 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 		}
 	}
 
-//#undef memcpy
-//	memcpy(0x12e30, &__hack_jumper, 7);
-//	*(uint64_t *)(r + 0) = r + 16;
-//	*(uint64_t *)(r + 8) = 0x12e3a;
-//	memcpy(r + 16, &__hack_debug_region, 48);
-//	*(uint8_t *)(0x1301e) = 0x01;
-	
-//	uint64_t *pp = (uint64_t *)0x13017;
-//	id block = ^ (const char *s) {
-//		printf(">>> %s\n", s);
-//	};
-//	
-//	*pp = 0x90000000002514ff; // callq *0x0; nop
-//	*(uint64_t *)(r +  0) = &__hack_debug_logs;
-//	*(uint64_t *)(r +  8) = shim(block);
-	
-//	*((uint8_t *)0x1310f) = 0x75;
-	
 	p = 0x130f8;
 	*p++ = 0xff;
 	*p++ = 0x14;
@@ -1054,55 +1036,10 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 	return result;
 }
 
-static void __attribute__((naked,used,noinline)) __hack_debug_logs(void)
-{
-	__asm__ __volatile__ (
-		"push %%rbp\n\t"
-		"mov %%rsp, %%rbp\n\t"
-		"push %%rax\n\t"
-		"push %%rbx\n\t"
-		"call *0x8\n\t"
-		"xor %%eax, %%eax\n\t"
-		"mov $0x1303a, %%rbx\n\t"
-		"cmpq $0x0, 0x7a6e0(%%rax)\n\t"
-		"movq $0x13021, %%rax\n\t"
-		"cmoveq %%rbx, %%rax\n\t"
-		"mov %%rax, 0x8(%%rbp)\n\t"
-		"pop %%rbx\n\t"
-		"pop %%rax\n\t"
-		"pop %%rbp\n\t"
-		"ret"
-		:
-		:
-	);
-}
-
 static msr_result deal_with_msr(uint32_t which)
 {
 	EfiLog("+++ Need MSR value for selector 0x%x\n", which);
 	return (msr_result){ 0, 0 };
-}
-
-static void __attribute__((naked,used,noinline)) __hack_jumper(void)
-{
-	__asm__ __volatile__ (
-		"jmp *0x1000\n\t"
-		"nop" :
-		:
-		:
-	);
-}
-
-static void __attribute__((naked,used,noinline)) __hack_debug_region(void)
-{
-	__asm__ __volatile__ (
-		"sub $0x48, %%rsp\n\t"
-		"mov $0x1030, %%rcx\n\t"
-		"mov %%rdx, %%rsi\n\t"
-		"jmp *0x1008"
-		:
-		:
-	);
 }
 
 int main(int argc, const char **argv)
