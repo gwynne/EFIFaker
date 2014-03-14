@@ -14,6 +14,7 @@
 #import <setjmp.h>
 #import "PELoader.h"
 #import "efi_tables.h"
+#import "smbios.h"
 #import "blockimp.h"
 
 static void __attribute__((naked,used,noinline)) __hack_debug_logs(void);
@@ -921,10 +922,22 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 		.StdErr = &outputProtocol,
 		.RuntimeServices = &runtimeServices,
 		.BootServices = &bootServices,
-		.NumberOfTableEntries = 0,
-		.ConfigurationTable = NULL,
+		.NumberOfTableEntries = 1,
+		.ConfigurationTable = (EFI_CONFIGURATION_TABLE []){
+			{ .VendorGuid = { 0xeb9d2d31, 0x2d88, 0x11d3, { 0x9a, 0x16, 0x0, 0x90, 0x27, 0x3f, 0xc1, 0x4d } }, .VendorTable = (void *)smbiosData },
+		},
 	};
 	EFI_HANDLE ih = (EFI_HANDLE)0xabad1deadeadbee7;
+
+	VOID *smp = mmap(0x1000000, 8192, PROT_READ | PROT_WRITE, MAP_ANON | MAP_PRIVATE, -1, 0);
+	if (smp == MAP_FAILED) {
+		NSLog(@"Failed to allocate SMBIOS table region, bail!");
+		return EFI_ABORTED;
+	}
+	memcpy(smp, smbiosData, sizeof(smbiosData));
+	SMBIOSTableEntryPoint *ep = smp;
+	ep->StructureTablePointer = smp + sizeof(SMBIOSTableEntryPoint);
+	st.ConfigurationTable[0].VendorTable = smp;
 	EFI_STATUS result = EFI_SUCCESS;
 	
 	st.Hdr.CRC32 = crc32((uint8_t *)&st, st.Hdr.HeaderSize);

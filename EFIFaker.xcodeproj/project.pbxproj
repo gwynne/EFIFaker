@@ -54,6 +54,7 @@
 		FA429800188B75E000AC361A /* blockimp_private.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = blockimp_private.h; sourceTree = "<group>"; };
 		FA429802188C828800AC361A /* gentramp.sh */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = gentramp.sh; sourceTree = "<group>"; };
 		FA429804188C82D000AC361A /* blockimp_x86_64.tramp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.script.sh; path = blockimp_x86_64.tramp; sourceTree = "<group>"; };
+		FA75CB4C18D176B300611C8A /* smbios.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = smbios.h; sourceTree = "<group>"; };
 		FAB4F2651884EC4300D54DA1 /* EFIFaker */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = EFIFaker; sourceTree = BUILT_PRODUCTS_DIR; };
 		FAB4F2681884EC4300D54DA1 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
 		FAB4F26B1884EC4300D54DA1 /* main.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = main.m; sourceTree = "<group>"; };
@@ -136,6 +137,7 @@
 				FAB4F26D1884EC4300D54DA1 /* Supporting Files */,
 				FAB4F2761884F07900D54DA1 /* PELoader.h */,
 				FAB4F2771884F07A00D54DA1 /* PELoader.m */,
+				FA75CB4C18D176B300611C8A /* smbios.h */,
 			);
 			path = EFIFaker;
 			sourceTree = "<group>";
@@ -283,6 +285,7 @@
 					"-Wno-empty-translation-unit",
 					"-Wno-padded",
 					"-Wno-unused-macros",
+					"-Wno-c++98-compat-pedantic",
 				);
 			};
 			name = Debug;
@@ -335,6 +338,7 @@
 					"-Wno-empty-translation-unit",
 					"-Wno-padded",
 					"-Wno-unused-macros",
+					"-Wno-c++98-compat-pedantic",
 				);
 			};
 			name = Release;
