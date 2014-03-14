@@ -330,9 +330,13 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 	EFI_CONSOLE_CONTROL_PROTOCOL consoleControlProtocol = {
 		.GetMode = shim(^ EFI_STATUS (EFI_CONSOLE_CONTROL_PROTOCOL *This, EFI_CONSOLE_CONTROL_SCREEN_MODE *Mode, BOOLEAN *GopUgaExists, BOOLEAN *StdInLocked) {
 			EfiLog("--> EfiConsoleControl.GetMode()\n");
-			*Mode = EfiConsoleControlScreenText;
-			*GopUgaExists = false;
-			*StdInLocked = false;
+			*Mode = EfiConsoleControlScreenGraphics;
+			if (GopUgaExists) {
+				*GopUgaExists = true;
+			}
+			if (StdInLocked) {
+				*StdInLocked = false;
+			}
 			return EFI_SUCCESS;
 		}),
 		.SetMode = shim(^ EFI_STATUS (EFI_CONSOLE_CONTROL_PROTOCOL *This, EFI_CONSOLE_CONTROL_SCREEN_MODE Mode) {
