@@ -18,6 +18,7 @@
 #import "smbios.h"
 #import "blockimp.h"
 
+#define EfiLog(format, ...) fprintf(stderr, format, ## __VA_ARGS__)
 
 typedef struct { uint64_t rax, rdx; } msr_result;
 
@@ -81,7 +82,60 @@ static EFI_TIME efi_time_from_timespec(struct timespec ts)
 	return efiTime;
 }
 
-#define EfiLog(format, ...) fprintf(stderr, format, ## __VA_ARGS__)
+static void _patch_rdmsr(uint64_t **tramp, uint8_t *begin, uint8_t *end)
+{
+	//0x000000000001333c B998010000                      movl       $0x198, %ecx
+	//0x0000000000013341 0F32                            rdmsrl     
+	union msr_patch {
+		struct {
+			uint8_t mov_op;
+			uint32_t msr_selector;
+			uint16_t msr_op;
+		} __attribute__((packed)) orig_instrs;
+		struct {
+			uint8_t call_ops[3];
+			uint32_t call_addr;
+		} __attribute__((packed)) tramp_instrs;
+	} __attribute__((packed)) msr_u;
+	
+	uint8_t *p = begin;
+	
+	while (p && p < end) {
+		p = memmem(p, end - p, (uint8_t[2]){ 0x0f, 0x32 }, 2);
+		if (p) {
+			EfiLog("+++ Patching rdmsr instruction at %p using trampoline at %p...\n", p, *tramp);
+			union msr_patch *patch = (union msr_patch *)(p - 5);
+			uint32_t selector = patch->orig_instrs.msr_selector;
+			void *block = shim(^ msr_result { return deal_with_msr(selector); });
+			
+			**tramp = (uint64_t)(uintptr_t)block;
+			patch->tramp_instrs.call_ops[0] = 0xff;
+			patch->tramp_instrs.call_ops[1] = 0x14;
+			patch->tramp_instrs.call_ops[2] = 0x25;
+			patch->tramp_instrs.call_addr = (uint32_t)((uintptr_t)(*tramp) & 0x00000000ffffffff);
+			++(*tramp);
+			p += 2;
+		}
+	}
+}
+
+static void _overwrite_with_call_to(uint64_t **tramp, uint8_t *p, id block)
+{
+	*p++ = 0xff;
+	*p++ = 0x14;
+	*p++ = 0x25;
+	*((uint32_t *)p) = *tramp;
+	p += 4;
+	*p++ = 0x48;
+	*p++ = 0x83;
+	*p++ = 0xc4;
+	*p++ = 0x40;
+	*p++ = 0x5d;
+	*p++ = 0xc3;
+	**tramp = (uint64_t)(uintptr_t)(uint8_t *)shim(block);
+	*tramp += 1;
+}
+
 
 typedef struct {
 	EFI_DATA_HUB_PROTOCOL Hub;
@@ -961,55 +1015,11 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 		return EFI_ABORTED;
 	}
 
-	union msr_patch {
-		struct {
-			uint8_t mov_op;
-			uint32_t msr_selector;
-			uint16_t msr_op;
-		} __attribute__((packed)) orig_instrs;
-		struct {
-			uint8_t call_ops[3];
-			uint32_t call_addr;
-		} __attribute__((packed)) tramp_instrs;
-	} __attribute__((packed)) msr_u;
-	
-	uint8_t *begin = 0x1000, *end = 0x33000, *p = begin;
 	uint64_t *nextTrampoline = (uint64_t *)(r + 16);
 	
-	while (p && p < end) {
-		p = memmem(p, end - p, (uint8_t[2]){ 0x0f, 0x32 }, 2);
-		if (p) {
-			EfiLog("+++ Patching rdmsr instruction at %p using trampoline at %p...\n", p, nextTrampoline);
-			union msr_patch *patch = (union msr_patch *)(p - 5);
-			uint32_t selector = patch->orig_instrs.msr_selector;
-			void *block = shim(^ msr_result { return deal_with_msr(selector); });
-			
-			NSCAssert(nextTrampoline < (uint64_t *)4096, @"trampolines must fit in that one damned page");
-			*nextTrampoline = (uint64_t)(uintptr_t)block;
-			patch->tramp_instrs.call_ops[0] = 0xff;
-			patch->tramp_instrs.call_ops[1] = 0x14;
-			patch->tramp_instrs.call_ops[2] = 0x25;
-			patch->tramp_instrs.call_addr = (uint32_t)((uintptr_t)nextTrampoline & 0x00000000ffffffff);
-			++nextTrampoline;
-			p += 2;
-		}
-	}
-
-	p = 0x130f8;
-	*p++ = 0xff;
-	*p++ = 0x14;
-	*p++ = 0x25;
-	*(uint32_t *)p = nextTrampoline;
-	*nextTrampoline = (uint64_t)(uintptr_t)(uint8_t *)shim(^ void (const CHAR8 *s) {
-		printf("*** %s\n", s);
-	});
-	p += 4;
-	*p++ = 0x48;
-	*p++ = 0x83;
-	*p++ = 0xc4;
-	*p++ = 0x40;
-	*p++ = 0x5d;
-	*p++ = 0xc3;
+//	_patch_rdmsr(&nextTrampoline, 0x1000, 0x33000);
+//	_overwrite_with_call_to(&nextTrampoline, 0x130f8, ^ void (const CHAR8 *s) { printf("*** %s\n", s); });
+	NSCAssert(nextTrampoline < (uint64_t *)4096, @"trampolines must fit in that one damned page");
 	
 //	EFI_GUID FsbFrequencyPropertyGuid = { 0xd1a0dD55, 0x75b9, 0x41a3, { 0x90, 0x36, 0x8f, 0x4a, 0x26, 0x1c, 0xbb, 0xa2 } };
 //	EFI_GUID DevicePathsSupportedGuid = { 0x5bb91cf7, 0xd816, 0x404b, { 0x86, 0x72, 0x68, 0xf2, 0x7f, 0x78, 0x31, 0xdc } };
