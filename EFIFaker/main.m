@@ -12,6 +12,7 @@
 #import <sys/mount.h>
 #import <sys/param.h>
 #import <setjmp.h>
+#import <pthread.h>
 #import "PELoader.h"
 #import "efi_tables.h"
 #import "smbios.h"
@@ -135,8 +136,8 @@ void setprop(EFI_DATA_HUB_PROTOCOL *hubProtocol, CHAR16 *name, EFI_GUID guid, VO
 #undef memcpy
 #undef memmove
 #undef memset
-static jmp_buf jb;
-static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
+
+static EFI_STATUS _enter_entrypoint(void *entrypoint)
 {
 	NSMutableDictionary *efiVars = @{
 		@"{ 0x7c436110, 0xab2a, 0x4bbb, { 0xa8, 0x80, 0xfe, 0x41, 0x99, 0x5c, 0x9f, 0x82 } }.boot-args": [@"-v" dataUsingEncoding:NSUTF16LittleEndianStringEncoding],
@@ -767,7 +768,8 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 		FakeFunc(StartImage),
 		.Exit = shim(^ EFI_STATUS (EFI_HANDLE ImageHandle, EFI_STATUS ExitStatus, UINTN ExitDataSize, CHAR16 *ExitData) {
 			EfiLog("--> Exit(%p, %llu, %llu, %p)\n", ImageHandle, ExitStatus & ~0x8000000000000000, ExitDataSize, ExitData);
-			longjmp(jb, ExitStatus);
+//			longjmp(jb, ExitStatus);
+			pthread_exit((void *)ExitStatus);
 		}),
 		FakeFunc(UnloadImage),
 		FakeFunc(ExitBootServices),
@@ -900,7 +902,8 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 		FakeFunc(GetNextHighMonotonicCount),
 		.ResetSystem = shim(^ VOID __attribute__((noreturn)) (EFI_RESET_TYPE ResetType, EFI_STATUS ResetStatus, UINTN DataSize, VOID *ResetData) {
 			EfiLog("--> ResetSystem(%s, %llx)\n", ResetType == EfiResetCold ? "Cold" : (ResetType == EfiResetWarm ? "Warm" : "Shutdown"), ResetStatus);
-			longjmp(jb, 0);
+			pthread_exit(NULL);
+//			longjmp(jb, 0);
 		}),
 		FakeFunc(UpdateCapsule),
 		FakeFunc(QueryCapsuleCapabilities),
@@ -1017,15 +1020,35 @@ static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
 	setprop(&dataHubProtocol.Hub, (CHAR16 *)"C\0P\0U\0F\0r\0e\0q\0u\0e\0n\0c\0y\0\0\0", specialGuid, (UINT64[]){ 200000000 }, sizeof(UINT64));
 	setprop(&dataHubProtocol.Hub, (CHAR16 *)"D\0e\0v\0i\0c\0e\0P\0a\0t\0h\0s\0S\0u\0p\0p\0o\0r\0t\0e\0d\0\0\0", specialGuid, (UINT32[]){ 1 }, sizeof(UINT32));
 	setprop(&dataHubProtocol.Hub, (CHAR16 *)"M\0o\0d\0e\0l\0\0\0", specialGuid, (VOID *)"M\0a\0c\0B\0o\0o\0k\0A\0i\0r\06\0,\02\0\0\0", 30);
-		
-	if ((result = setjmp(jb)) == 0) {
-		__asm__ (
-			"call *%3" :
-			"=a" (result) :
-			"c" (ih), "d" (&st), "r" (loader.entryPoint) :
-			"memory", "r8", "r9", "r10", "r11", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5"
-		);
+	
+	__asm__ (
+		"call *%3\n\t" :
+		"=a" (result) :
+		"c" (ih), "d" (&st), "r" (entrypoint) :
+		"memory", "r8", "r9", "r10", "r11", "r12", "xmm0", "xmm1", "xmm2", "xmm3", "xmm4", "xmm5"
+	);
+	return result;
+}
+
+static EFI_STATUS __attribute__((noinline)) callEntryPoint(PELoader *loader)
+{
+	void *sp = mmap(0x20000000, 0x10000000, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_PRIVATE | MAP_FIXED, -1, 0);
+	
+	if (sp == MAP_FAILED) {
+		NSLog(@"Can't allocate stack! Bailing");
+		return EFI_ABORTED;
 	}
+	
+	pthread_attr_t attr;
+	
+	pthread_attr_init(&attr);
+	pthread_attr_setstack(&attr, sp, 0x10000000);
+
+	pthread_t thread;
+	EFI_STATUS result = EFI_SUCCESS;
+	
+	pthread_create(&thread, &attr, (void * (*)(void *))_enter_entrypoint, (void *)loader.entryPoint);
+	pthread_join(thread, (void **)&result);
 	return result;
 }
 
