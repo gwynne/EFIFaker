@@ -136,6 +136,52 @@ static void _overwrite_with_call_to(uint64_t **tramp, uint8_t *p, id block)
 	*tramp += 1;
 }
 
+typedef struct _pool_allocation_header {
+	uint64_t magic;
+	struct _pool_allocation_header *next;
+	uint64_t len;
+	uint64_t in_use;
+} _pool_allocation_header;
+static UINTN _pool_allocated_bytes = 0;
+static void *_pool_alloc(void *pool, UINTN size)
+{
+	NSCAssert(pool != NULL, @"pool can't be NULL");
+	_pool_allocation_header *last_header = NULL, *header = pool;
+	
+	while (header && (header->in_use || header->len < size)) {
+		last_header = header;
+		header = header->next;
+	}
+	if (header) {
+		header->in_use = 1;
+	} else {
+		if (last_header && last_header->magic == 0x0110122123323443) {
+			header = (_pool_allocation_header *)(((uint8_t *)last_header) + sizeof(_pool_allocation_header) + last_header->len);
+		} else {
+			header = pool;
+		}
+		
+		header = (_pool_allocation_header *)((((uintptr_t)header) + 31) & ~31);
+		header->magic = 0x0110122123323443;
+		header->len = size;
+		header->in_use = 1;
+
+		last_header->next = header;
+		header->next = NULL;
+	}
+	_pool_allocated_bytes += header->len + sizeof(_pool_allocation_header);
+	NSCAssert(_pool_allocated_bytes <= 0x10000000, @"overran the pool!");
+	return ((uint8_t *)header) + sizeof(_pool_allocation_header);
+}
+static void _pool_free(void *ptr)
+{
+	_pool_allocation_header *header = (_pool_allocation_header *)((uint8_t *)ptr - sizeof(_pool_allocation_header));
+	
+	if (header->magic != 0x0110122123323443)
+		return;
+	header->in_use = 0;
+	_pool_allocated_bytes -= header->len + sizeof(_pool_allocation_header);
+}
 
 typedef struct {
 	EFI_DATA_HUB_PROTOCOL Hub;
@@ -729,6 +775,13 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 		.NumberOfTimers = 1,
 		.DmaBufferAlignment = 1048576,
 	};
+	void *pool_base = mmap(0x10000000, 0x10000000, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_FIXED | MAP_PRIVATE, -1, 0);
+	if (!pool_base) {
+		NSLog(@"Can't set up allocation pool, bailing");
+		free(graphicsOutputProtocol.Mode->FrameBufferBase);
+		CFRelease((__bridge CFMutableArrayRef)dataHubProtocol.dataRecords);
+		return EFI_ABORTED;
+	}
 	#define FakeFunc(name) .name = shim(^ { NSLog(@"Unimplemented %s", #name); return EFI_UNSUPPORTED; })
 	EFI_BOOT_SERVICES bootServices = {
 		.Hdr = { EFI_BOOT_SERVICES_SIGNATURE, EFI_BOOT_SERVICES_REVISION, sizeof(EFI_BOOT_SERVICES), 0, 0 },
@@ -738,21 +791,25 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 			if (MemoryType > EfiMaxMemoryType)
 				return EFI_INVALID_PARAMETER;
 			if (Type == AllocateAnyPages) {
-				EfiLog("--> AllocatePages(AllocateAnyPages, %d, %llu)\n", MemoryType, Pages);
-				*Memory = mmap(NULL, Pages * getpagesize(), PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_PRIVATE, -1, 0);
+//				EfiLog("--> AllocatePages(AllocateAnyPages, %d, %llu): ", MemoryType, Pages);
+				*Memory = _pool_alloc(pool_base, Pages * getpagesize()) ?: MAP_FAILED;
 			} else if (Type == AllocateMaxAddress) {
-				EfiLog("--> AllocatePages(AllocateMaxAddress, %d, %llu, %p)\n", MemoryType, Pages, (VOID *)*Memory);
-				*Memory = mmap(*Memory - ((Pages + 5) * getpagesize()), PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_PRIVATE, MAP_ANON | MAP_PRIVATE, -1, 0);
+//				EfiLog("--> AllocatePages(AllocateMaxAddress, %d, %llu, %p): ", MemoryType, Pages, (VOID *)*Memory);
+				*Memory = _pool_alloc(pool_base, Pages * getpagesize()) ?: MAP_FAILED;
+//				*Memory = mmap((*Memory + 1) - ((Pages + 50) * getpagesize()), Pages * getpagesize(), PROT_READ | PROT_WRITE | PROT_EXEC, MAP_FIXED | MAP_ANON | MAP_PRIVATE, -1, 0);
 			} else if (Type == AllocateAddress) {
-				EfiLog("--> AllocatePages(AllocateAddress, %d, %llu, %p)\n", MemoryType, Pages, (VOID *)*Memory);
+//				EfiLog("--> AllocatePages(AllocateAddress, %d, %llu, %p): ", MemoryType, Pages, (VOID *)*Memory);
 				*Memory = mmap(*Memory, Pages * getpagesize(), PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_FIXED | MAP_PRIVATE, -1, 0);
 			}
-			if ((VOID *)*Memory == MAP_FAILED)
+			if ((VOID *)*Memory == MAP_FAILED) {
+//				EfiLog("Failed\n");
 				return EFI_OUT_OF_RESOURCES;
-			EfiLog("<-- %p\n", (void *)*Memory);
+			}
+//			EfiLog(" %p\n", (void *)*Memory);
 			return EFI_SUCCESS;
 		}),
 		.FreePages = shim(^ EFI_STATUS (EFI_PHYSICAL_ADDRESS Memory, UINTN Pages) {
+			_pool_free(Memory); // should be harmless if it was mapped
 			if (munmap((VOID *)Memory, Pages * getpagesize()) < 0)
 				return EFI_SUCCESS;//return EFI_NOT_FOUND;
 			return EFI_SUCCESS;
@@ -765,7 +822,7 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 //				EfiLog("Bad memory type\n");
 				return EFI_INVALID_PARAMETER;
 			}
-			*Buffer = malloc(RealSize);
+			*Buffer = _pool_alloc(pool_base, RealSize);
 			if (!*Buffer) {
 //				EfiLog("Allocation failure\n");
 				return EFI_OUT_OF_RESOURCES;
@@ -774,7 +831,7 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 			return EFI_SUCCESS;
 		}),
 		.FreePool = shim(^ EFI_STATUS (VOID *Buffer) {
-			free(Buffer);
+			_pool_free(Buffer);
 			return EFI_SUCCESS;
 		}),
 		FakeFunc(CreateEvent),
