@@ -819,7 +819,20 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 				return EFI_SUCCESS;//return EFI_NOT_FOUND;
 			return EFI_SUCCESS;
 		}),
-		FakeFunc(GetMemoryMap),
+		.GetMemoryMap = shim(^ EFI_STATUS (UINTN *MemoryMapSize, EFI_MEMORY_DESCRIPTOR *MemoryMap, UINTN *MapKey,
+										   UINTN *DescriptorSize, UINT32 *DescriptorVersion) {
+			EfiLog("--> GetMemoryMap(%llu)\n", *MemoryMapSize);
+			if (*MemoryMapSize < sizeof(EFI_MEMORY_DESCRIPTOR)) {
+				*MemoryMapSize = sizeof(EFI_MEMORY_DESCRIPTOR);
+				return EFI_BUFFER_TOO_SMALL;
+			}
+			*MapKey = 1;
+			*MemoryMapSize = sizeof(EFI_MEMORY_DESCRIPTOR);
+			*MemoryMap = (EFI_MEMORY_DESCRIPTOR){ EfiLoaderData, 0x0, 0x0, 0xffffffff, 0xffffffff / 4096, EFI_MEMORY_WB | EFI_MEMORY_RUNTIME };
+			*DescriptorSize = sizeof(EFI_MEMORY_DESCRIPTOR);
+			*DescriptorVersion = 1;
+			return EFI_SUCCESS;
+		}),
 		.AllocatePool = shim(^ EFI_STATUS (EFI_MEMORY_TYPE PoolType, UINTN Size, VOID **Buffer) {
 			UINTN RealSize = (Size % 4096) == 0 ? Size : (Size + 4096 - (Size % 4096));
 //			EfiLog("--> AllocatePool(%d, %llu/%llu): ", PoolType, Size, RealSize);
@@ -888,7 +901,10 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 			pthread_exit((void *)ExitStatus);
 		}),
 		FakeFunc(UnloadImage),
-		FakeFunc(ExitBootServices),
+		.ExitBootServices = shim(^ EFI_STATUS (EFI_HANDLE ImageHandle, UINTN MapKey) {
+			EfiLog("--> ExitBootServices(%llu)\n", MapKey);
+			return EFI_SUCCESS;
+		}),
 		FakeFunc(GetNextMonotonicCount),
 		.Stall = shim(^ EFI_STATUS (UINTN Microseconds) {
 			EfiLog("--> Stall(%llu)\n", Microseconds);
@@ -976,7 +992,10 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 		FakeFunc(SetTime),
 		FakeFunc(GetWakeupTime),
 		FakeFunc(SetWakeupTime),
-		FakeFunc(SetVirtualAddressMap),
+		.SetVirtualAddressMap = shim(^ EFI_STATUS (UINTN MemoryMapSize, UINTN DescriptorSize, UINT32 DescriptorVersion, EFI_MEMORY_DESCRIPTOR *VirtualMap) {
+			EfiLog("--> SetVirtualAddressMap(%llu, %llu, %u, %p)\n", MemoryMapSize, DescriptorSize, DescriptorVersion, VirtualMap);
+			return EFI_SUCCESS;
+		}),
 		FakeFunc(ConvertPointer),
 		.GetVariable = shim(^ EFI_STATUS (CHAR16 *VariableName, EFI_GUID *VendorGuid, UINT32 *Attributes, UINTN *DataSize, VOID *Data) {
 			EfiLog("--> GetVariable(%s, %p, %llu, %p)\n", utf8_str(VariableName), Attributes, *DataSize, Data);
