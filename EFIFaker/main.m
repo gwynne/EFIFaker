@@ -362,7 +362,7 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 		.Revision = EFI_LOADED_IMAGE_PROTOCOL_REVISION,
 		.ParentHandle = NULL,
 		.SystemTable = NULL,
-		.DeviceHandle = 0xabad1deadeadbee1,
+		.DeviceHandle = 0xabad1dee,
 		.FilePath = (EFI_DEVICE_PATH_PROTOCOL *)&devicePathProtocol,
 		.Reserved = NULL,
 		.LoadOptionsSize = 0,
@@ -961,11 +961,11 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 		FakeFunc(UninstallMultipleProtocolInterfaces),
 		FakeFunc(CalculateCrc32),
 		.CopyMem = shim(^ VOID (VOID *Destination, VOID *Source, UINTN Length) {
-			EfiLog("--> CopyMem(%p, %p, %llu)\n", Destination, Source, Length);
+//			EfiLog("--> CopyMem(%p, %p, %llu)\n", Destination, Source, Length);
 			memmove(Destination, Source, Length);
 		}),
 		.SetMem = shim(^ VOID (VOID *Buffer, UINTN Size, UINT8 Value) {
-			EfiLog("--> SetMem(%p, %llu, %hhu)\n", Buffer, Size, Value);
+//			EfiLog("--> SetMem(%p, %llu, %hhu)\n", Buffer, Size, Value);
 			memset(Buffer, Value, Size);
 		}),
 		FakeFunc(CreateEventEx),
@@ -1030,11 +1030,11 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 		.FirmwareVendor = (CHAR16 *)"F\0a\0k\0e\0 \0E\0F\0I\0\0\0",
 		.FirmwareRevision = 0,
 		.__Padding = 0,
-		.ConsoleInHandle = (EFI_HANDLE)0xabad1deadeadbee4,
+		.ConsoleInHandle = (EFI_HANDLE)0xabad1dec,
 		.ConIn = &inputProtocol,
-		.ConsoleOutHandle = (EFI_HANDLE)0xabad1deadeadbeef,
+		.ConsoleOutHandle = (EFI_HANDLE)0xabad1deb,
 		.ConOut = &outputProtocol,
-		.StandardErrorHandle = (EFI_HANDLE)0xabad1deadeadbee5,
+		.StandardErrorHandle = (EFI_HANDLE)0xabad1dea,
 		.StdErr = &outputProtocol,
 		.RuntimeServices = &runtimeServices,
 		.BootServices = &bootServices,
@@ -1068,8 +1068,6 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 		return EFI_ABORTED;
 	}
 	
-	//0x000000000001333c B998010000                      movl       $0x198, %ecx
-	//0x0000000000013341 0F32                            rdmsrl     
 	uint8_t *r = mmap(0, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_FIXED | MAP_PRIVATE, -1, 0);
 	
 	if (r == MAP_FAILED) {
