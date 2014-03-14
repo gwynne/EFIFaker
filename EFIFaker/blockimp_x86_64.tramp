@@ -68,20 +68,28 @@ asm << 'EOF'
 		// --> retaddr 0x8(%rbp)
 		// --> saved frame pointer 0x0(%rbp)
 		mov		%rcx, %rsi
-		mov		%rdx, %rdx
+//		mov		%rdx, %rdx
 		mov		%r8, %rcx
 		mov		%r9, %r8
-		mov		0x38(%rbp), %r9
+		mov		0x88(%rbp), %r9
+		push	%r9
+		mov		0x80(%rbp), %r9
+		push	%r9
+		mov		0x78(%rbp), %r9
+		push	%r9
+		mov		0x70(%rbp), %r9
+		push	%r9
+		mov		0x68(%rbp), %r9
+		push	%r9
+		mov		0x60(%rbp), %r9
+		push	%r9
+		mov		0x58(%rbp), %r9
+		push	%r9
+		mov		0x50(%rbp), %r9
+		push	%r9
+		mov		0x48(%rbp), %r9
 		push	%r9
 		mov		0x30(%rbp), %r9
-		push	%r9
-		mov		0x28(%rbp), %r9
-		push	%r9
-		mov		0x20(%rbp), %r9
-		push	%r9
-		mov		0x18(%rbp), %r9
-		push	%r9
-		mov		0x10(%rbp), %r9
 
 		// Load the block reference from the config page, and move to the first parameter
 		mov   (%r11), %rdi
@@ -89,7 +97,7 @@ asm << 'EOF'
 		// Jump to the block fptr; can't tail call because we need to tidy the stack (eww)
 		call	*0x10(%rdi)
 
-		add		$0x28, %rsp
+		add		$0x48, %rsp
 		pop %r15
 		pop %r14
 		pop %r13
