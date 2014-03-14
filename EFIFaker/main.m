@@ -1081,11 +1081,12 @@ static EFI_STATUS _enter_entrypoint(void *entrypoint)
 	runtimeServices.Hdr.CRC32 = crc32((uint8_t *)&runtimeServices, runtimeServices.Hdr.HeaderSize);
 	loadedImageProtocol.SystemTable = &st;
 	
-	// A region apparently required by the bootloader
+	// ROM region
 	if (mmap(0xfffff000, 0x1000, PROT_READ | PROT_WRITE, MAP_ANON | MAP_FIXED | MAP_PRIVATE, -1, 0) == MAP_FAILED) {
 		NSLog(@"Can't allocate highmem region for bootloader, bailing");
 		return EFI_ABORTED;
 	}
+	memset(0xffffff00, 0xff, 0xff);
 	
 	uint8_t *r = mmap(0, 4096, PROT_READ | PROT_WRITE | PROT_EXEC, MAP_ANON | MAP_FIXED | MAP_PRIVATE, -1, 0);
 	
